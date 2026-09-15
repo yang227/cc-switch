@@ -137,6 +137,7 @@ const extractApiUrl = (provider: Provider, fallbackText: string) => {
     }
 
     const directBaseUrl =
+      object.baseURL ||
       object.baseUrl ||
       object.base_url ||
       object.options?.baseURL ||
@@ -230,7 +231,8 @@ export function ProviderCard({
   // OMO and OMO Slim share the same card behavior
   const isAnyOmo = isOmo || isOmoSlim;
   const handleDisableAnyOmo = isOmoSlim ? onDisableOmoSlim : onDisableOmo;
-  const isAdditiveMode = (appId === "opencode" && !isAnyOmo) || appId === "pi";
+  const isAdditiveMode =
+    (appId === "opencode" && !isAnyOmo) || appId === "pi" || appId === "mcode";
 
   const { data: health } = useProviderHealth(
     provider.id,
@@ -253,6 +255,23 @@ export function ProviderCard({
     return config.models
       .filter((model) => typeof model.id === "string" && model.id.trim())
       .map((model) => ({ id: model.id, name: model.name }));
+  }, [appId, provider.settingsConfig]);
+
+  const dshModels = useMemo(() => {
+    if (appId !== "deepseek-harness") return [];
+    const models = (provider.settingsConfig as Record<string, unknown>)?.models;
+    if (!Array.isArray(models)) return [];
+    // Bare strings are a valid native catalog shape; treat them as model ids
+    // the same way the form's normalizeDshModels does.
+    return models
+      .map((model) =>
+        typeof model === "string"
+          ? model.trim()
+          : model && typeof model === "object"
+            ? String((model as Record<string, unknown>).id ?? "").trim()
+            : "",
+      )
+      .filter(Boolean);
   }, [appId, provider.settingsConfig]);
 
   const isClickableUrl = useMemo(() => {
@@ -351,7 +370,7 @@ export function ProviderCard({
     ? isCurrent
     : appId === "openclaw"
       ? Boolean(isDefaultModel)
-      : appId === "opencode" || appId === "pi"
+      : appId === "opencode" || appId === "pi" || appId === "mcode"
         ? false
         : isAutoFailoverEnabled
           ? activeProviderId === provider.id
@@ -511,6 +530,22 @@ export function ProviderCard({
                   })}
                 </span>
               )}
+
+              {appId === "deepseek-harness" && dshModels.length > 0 && (
+                <ProviderStatusBadge
+                  tone="info"
+                  label={`${dshModels.length} ${t("provider.models", { defaultValue: "models" })}`}
+                />
+              )}
+
+              {appId === "deepseek-harness" &&
+                isCurrent &&
+                provider.meta?.dshCurrentModel && (
+                  <ProviderStatusBadge
+                    tone="success"
+                    label={provider.meta.dshCurrentModel}
+                  />
+                )}
             </div>
 
             {codexOfficialIdentity && codexOfficialIdentity !== "api_key" ? (
@@ -699,7 +734,7 @@ export function ProviderCard({
                 // (category === "official") 一律隐藏：它们 base_url 故意留空、走客户端
                 // 默认/OAuth 端点，cc-switch 没有可靠的探测目标（尤其 Claude Desktop
                 // 官方是原生 1P 模式，根本不在请求路径上）。
-                onTest && provider.category !== "official"
+                onTest && appId !== "mcode" && provider.category !== "official"
                   ? () => onTest(provider)
                   : undefined
               }
@@ -730,7 +765,11 @@ export function ProviderCard({
               isDefaultModel={isDefaultModel}
               isRemovalProtected={isRemovalProtected}
               isStateChangeProtected={isStateChangeProtected}
-              defaultModelOptions={openclawDefaultModelOptions}
+              defaultModelOptions={
+                appId === "deepseek-harness"
+                  ? dshModels.map((id) => ({ id, name: id }))
+                  : openclawDefaultModelOptions
+              }
               onSetAsDefault={onSetAsDefault}
             />
           </div>

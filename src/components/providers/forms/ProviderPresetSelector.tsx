@@ -20,7 +20,9 @@ import type { ClaudeDesktopProviderPreset } from "@/config/claudeDesktopProvider
 import type { OpenCodeProviderPreset } from "@/config/opencodeProviderPresets";
 import type { OpenClawProviderPreset } from "@/config/openclawProviderPresets";
 import type { HermesProviderPreset } from "@/config/hermesProviderPresets";
+import type { McodeProviderPreset } from "@/config/mcodeProviderPresets";
 import type { PiProviderPreset } from "@/config/piProviderPresets";
+import type { DeepSeekHarnessProviderPreset } from "@/config/deepseekHarnessProviderPresets";
 import type { ProviderCategory } from "@/types";
 import {
   universalProviderPresets,
@@ -46,7 +48,9 @@ export type AnyPreset =
   | OpenCodeProviderPreset
   | OpenClawProviderPreset
   | HermesProviderPreset
-  | PiProviderPreset;
+  | PiProviderPreset
+  | DeepSeekHarnessProviderPreset
+  | McodeProviderPreset;
 
 export type PresetEntry = {
   id: string;

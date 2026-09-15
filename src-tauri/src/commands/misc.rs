@@ -111,8 +111,8 @@ pub struct ToolVersion {
     wsl_distro: Option<String>,
 }
 
-const VALID_TOOLS: [&str; 8] = [
-    "claude", "codex", "gemini", "grok", "opencode", "openclaw", "hermes", "pi",
+const VALID_TOOLS: [&str; 9] = [
+    "claude", "codex", "gemini", "grok", "opencode", "openclaw", "hermes", "pi", "dsh",
 ];
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -434,6 +434,7 @@ fn tool_display_name(tool: &str) -> &'static str {
         "openclaw" => "OpenClaw",
         "hermes" => "Hermes",
         "pi" => "Pi",
+        "dsh" => "DeepSeek Harness",
         _ => "Unknown",
     }
 }
@@ -763,7 +764,9 @@ async fn get_single_tool_version_impl(
     let client = crate::proxy::http_client::get();
 
     // 1. 获取本地版本
-    let probe = if let Some(distro) = wsl_distro.as_deref() {
+    let probe = if tool == "dsh" {
+        try_get_dsh_desktop_version()
+    } else if let Some(distro) = wsl_distro.as_deref() {
         try_get_version_wsl(tool, distro, wsl_shell, wsl_shell_flag)
     } else {
         #[cfg(target_os = "windows")]
@@ -825,6 +828,7 @@ async fn get_single_tool_version_impl(
         "pi" => {
             fetch_npm_latest_for_tool(&client, "@earendil-works/pi-coding-agent", tool, local).await
         }
+        "dsh" => None,
         _ => None,
     };
 
@@ -837,6 +841,40 @@ async fn get_single_tool_version_impl(
         env_type,
         wsl_distro,
     }
+}
+
+#[cfg(target_os = "macos")]
+fn try_get_dsh_desktop_version() -> ShellProbe {
+    let plist = std::path::Path::new("/Applications/DSH Desktop.app/Contents/Info.plist");
+    if !plist.exists() {
+        return ShellProbe::NotFound(NOT_INSTALLED.to_string());
+    }
+    match std::process::Command::new("/usr/bin/plutil")
+        .args(["-extract", "CFBundleShortVersionString", "raw", "-o", "-"])
+        .arg(plist)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let version = decode_command_output(&output.stdout).trim().to_string();
+            if version.is_empty() {
+                ShellProbe::FoundButFailed("DSH Desktop version is missing".to_string())
+            } else {
+                ShellProbe::Found(version)
+            }
+        }
+        Ok(output) => {
+            ShellProbe::FoundButFailed(last_lines(decode_command_output(&output.stderr).trim(), 4))
+        }
+        Err(error) => ShellProbe::FoundButFailed(format!("Unable to inspect DSH Desktop: {error}")),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn try_get_dsh_desktop_version() -> ShellProbe {
+    // DSH Desktop is only distributed as a macOS .app; other platforms have no
+    // standalone desktop bundle to probe (their DSH CLI detection goes through
+    // try_get_version / try_get_version_wsl in the environment-check flow).
+    ShellProbe::NotFound("DSH Desktop is only available on macOS".to_string())
 }
 
 /// 该工具在 npm 上的预发布通道 tag(靠前者优先)。仅当本地版本已**严格领先**
@@ -945,15 +983,37 @@ fn pick_latest_version(
     Some(best)
 }
 
+/// npm 包 dist-tags 专用端点的 URL。
+///
+/// 该端点的响应体就是 dist-tags 对象本身(几十到几千字节);而 `/{package}` 返回的是
+/// 含每个历史版本元数据的完整 packument,codex / opencode / openclaw 这类高频发版的包
+/// 已有十几到二十几 MB,一次刷新要下几十 MB(#7339)。scoped 包名的 `/` 按 registry
+/// 约定转义成 `%2f`。
+fn npm_dist_tags_url(package: &str) -> String {
+    format!(
+        "https://registry.npmjs.org/-/package/{}/dist-tags",
+        package.replace('/', "%2f")
+    )
+}
+
 /// 拉取 npm 包的完整 dist-tags(单次请求即含 latest/next/beta/...)。
+///
+/// 与 GitHub / PyPI 两条来源一样套 `LATEST_PROBE_TIMEOUT`:取不到就返回 None,由调用方
+/// 显示「未知」,而不是沿用全局客户端的 600s 总超时让卡片一直「加载中」。包不存在时
+/// 端点返回 404 与一个 JSON 字符串体,解析成 Map 失败,同样落到 None。
 async fn fetch_npm_dist_tags(
     client: &reqwest::Client,
     package: &str,
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
-    let url = format!("https://registry.npmjs.org/{package}");
-    let resp = client.get(&url).send().await.ok()?;
-    let json = resp.json::<serde_json::Value>().await.ok()?;
-    json.get("dist-tags")?.as_object().cloned()
+    let resp = client
+        .get(npm_dist_tags_url(package))
+        .timeout(LATEST_PROBE_TIMEOUT)
+        .send()
+        .await
+        .ok()?;
+    resp.json::<serde_json::Map<String, serde_json::Value>>()
+        .await
+        .ok()
 }
 
 /// 查询某 npm 工具要展示的"最新版本":取 `latest`,并在本地版本领先时按工具的
@@ -5086,6 +5146,24 @@ mod tests {
     }
 
     #[test]
+    fn dsh_is_part_of_environment_checks() {
+        assert!(VALID_TOOLS.contains(&"dsh"));
+        assert_eq!(tool_display_name("dsh"), "DeepSeek Harness");
+        // The macOS probe shells out to a locally installed DSH Desktop; CI
+        // runners and machines without DSH must not fail the suite over it.
+        #[cfg(target_os = "macos")]
+        if !std::path::Path::new("/Applications/DSH Desktop.app/Contents/Info.plist").exists() {
+            eprintln!("DSH Desktop not installed; skipping the version probe");
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        match try_get_dsh_desktop_version() {
+            ShellProbe::Found(version) => assert!(!version.is_empty()),
+            _ => panic!("installed DSH Desktop should be detected"),
+        }
+    }
+
+    #[test]
     fn test_compare_semver() {
         use std::cmp::Ordering;
         assert_eq!(
@@ -5163,6 +5241,20 @@ mod tests {
         assert_eq!(
             pick_latest_version(map, &["beta"], Some("0.200.0")),
             Some("0.135.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_npm_dist_tags_url() {
+        // 普通包名直接拼进路径
+        assert_eq!(
+            npm_dist_tags_url("openclaw"),
+            "https://registry.npmjs.org/-/package/openclaw/dist-tags"
+        );
+        // scoped 包名的 `/` 按 registry 约定转义成 %2f
+        assert_eq!(
+            npm_dist_tags_url("@openai/codex"),
+            "https://registry.npmjs.org/-/package/@openai%2fcodex/dist-tags"
         );
     }
 
