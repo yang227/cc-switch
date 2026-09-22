@@ -20,7 +20,9 @@ import type { ClaudeDesktopProviderPreset } from "@/config/claudeDesktopProvider
 import type { OpenCodeProviderPreset } from "@/config/opencodeProviderPresets";
 import type { OpenClawProviderPreset } from "@/config/openclawProviderPresets";
 import type { HermesProviderPreset } from "@/config/hermesProviderPresets";
+import type { McodeProviderPreset } from "@/config/mcodeProviderPresets";
 import type { PiProviderPreset } from "@/config/piProviderPresets";
+import type { DeepSeekHarnessProviderPreset } from "@/config/deepseekHarnessProviderPresets";
 import type { ProviderCategory } from "@/types";
 import {
   universalProviderPresets,
@@ -46,7 +48,9 @@ export type AnyPreset =
   | OpenCodeProviderPreset
   | OpenClawProviderPreset
   | HermesProviderPreset
-  | PiProviderPreset;
+  | PiProviderPreset
+  | DeepSeekHarnessProviderPreset
+  | McodeProviderPreset;
 
 export type PresetEntry = {
   id: string;
@@ -261,7 +265,7 @@ export function ProviderPresetSelector({
     );
   };
 
-  const renderPresetIcon = (preset: AnyPreset) => {
+  const renderPresetIcon = (preset: AnyPreset, isSelected: boolean) => {
     if (preset.icon) {
       return (
         <ProviderIcon
@@ -269,7 +273,11 @@ export function ProviderPresetSelector({
           name={preset.name}
           color={preset.iconColor}
           size={16}
-          className="flex-shrink-0"
+          // currentColor 单色图标：未选中时取前景色，而非继承按钮的 muted 文字色，
+          // 与表单图标预览、主面板卡片保持同色；选中态继续继承 text-white
+          className={
+            isSelected ? "flex-shrink-0" : "flex-shrink-0 text-foreground"
+          }
         />
       );
     }
@@ -433,7 +441,7 @@ export function ProviderPresetSelector({
                 t("providerPreset.other")
               }
             >
-              {renderPresetIcon(entry.preset)}
+              {renderPresetIcon(entry.preset, isSelected)}
               <span className="truncate">
                 {getPresetDisplayName(entry.preset, t)}
               </span>
@@ -471,7 +479,7 @@ export function ProviderPresetSelector({
                 icon={preset.icon}
                 name={preset.name}
                 size={14}
-                className="flex-shrink-0"
+                className="flex-shrink-0 text-foreground"
               />
               <span className="truncate">{preset.name}</span>
               <span className="absolute -top-1 -right-1 flex items-center gap-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-md">
