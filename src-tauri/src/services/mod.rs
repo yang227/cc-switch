@@ -2,6 +2,7 @@ pub mod balance;
 pub mod codex_oauth_models;
 pub mod coding_plan;
 pub mod config;
+pub(crate) mod dsh_state;
 pub mod env_checker;
 pub mod env_manager;
 pub mod mcp;
@@ -51,3 +52,5 @@ pub use usage_stats::{
     DailyStats, LogFilters, ModelStats, PaginatedLogs, ProviderLimitStatus, ProviderStats,
     RequestLogDetail, UsageSummary, UsageSummaryByApp,
 };
+
+pub mod session_usage_mcode;

@@ -11,6 +11,7 @@ mod commands;
 mod config;
 mod database;
 mod deeplink;
+mod deepseek_harness_config;
 mod error;
 mod gemini_config;
 mod gemini_mcp;
@@ -20,6 +21,7 @@ mod init_status;
 mod lightweight;
 #[cfg(target_os = "linux")]
 mod linux_fix;
+mod mcode_config;
 mod mcp;
 mod model_capabilities;
 mod openclaw_config;
@@ -49,6 +51,9 @@ pub use commands::*;
 pub use config::{get_claude_mcp_path, get_claude_settings_path, read_json_file};
 pub use database::{Database, Profile};
 pub use deeplink::{import_provider_from_deeplink, parse_deeplink_url, DeepLinkImportRequest};
+pub use deepseek_harness_config::{
+    get_credentials_path, get_dsh_home, get_profile_dir, get_settings_path,
+};
 pub use error::AppError;
 pub use grok_config::get_grok_config_path;
 pub use mcp::{
@@ -275,6 +280,10 @@ fn handle_deeplink_url(
 
             if focus_main_window {
                 if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = window.set_skip_taskbar(false);
+                    }
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -376,6 +385,13 @@ pub fn run() {
 
             // Show and focus window regardless
             if let Some(window) = app.get_webview_window("main") {
+                // 防御性重置 Windows 的 skip_taskbar：single_instance 触发时，
+                // 原进程可能因 silent_startup / 关闭到托盘等处于 skip_taskbar(true) 状态，
+                // 仅 show() 不会重置该状态，会导致窗口可见但不在任务栏、最小化后消失。
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = window.set_skip_taskbar(false);
+                }
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -580,6 +596,10 @@ pub fn run() {
                     });
                     // 主窗口默认 visible:false，恢复界面必须强制显示
                     if let Some(window) = app.get_webview_window("main") {
+                        #[cfg(target_os = "windows")]
+                        {
+                            let _ = window.set_skip_taskbar(false);
+                        }
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -871,6 +891,14 @@ pub fn run() {
                 Ok(_) => log::debug!("○ No Pi provider changes from native config"),
                 Err(e) => log::warn!("✗ Failed to import Pi providers: {e}"),
             }
+            match crate::services::provider::import_deepseek_harness_providers_from_live(&app_state)
+            {
+                Ok(count) if count > 0 => {
+                    log::info!("✓ Synced {count} DeepSeek Harness provider(s) from native config");
+                }
+                Ok(_) => log::debug!("○ No DeepSeek Harness provider changes from native config"),
+                Err(e) => log::warn!("✗ Failed to import DeepSeek Harness providers: {e}"),
+            }
 
             // 2. OMO 配置导入（当数据库中无 OMO provider 时，从本地文件导入）
             {
@@ -980,16 +1008,7 @@ pub fn run() {
             if app_state.db.is_prompts_table_empty().unwrap_or(false) {
                 log::info!("Prompts table empty, importing from live configurations...");
 
-                for app in [
-                    crate::app_config::AppType::Claude,
-                    crate::app_config::AppType::Codex,
-                    crate::app_config::AppType::Gemini,
-                    crate::app_config::AppType::GrokBuild,
-                    crate::app_config::AppType::OpenCode,
-                    crate::app_config::AppType::OpenClaw,
-                    crate::app_config::AppType::Hermes,
-                    crate::app_config::AppType::Pi,
-                ] {
+                for app in crate::services::prompt::PromptService::first_launch_import_apps() {
                     match crate::services::prompt::PromptService::import_from_file_on_first_launch(
                         &app_state,
                         app.clone(),
@@ -1478,7 +1497,8 @@ pub fn run() {
             commands::delete_profile,
             commands::clear_current_profile,
             commands::apply_profile,
-            // model list fetch (OpenAI-compatible /v1/models)
+            // Fetch OpenAI-compatible and Anthropic model lists. Response data structure:
+            // data[].id, data[]?.owned_by. Special: supports Zhipu OpenAI Responses models[].slug.
             commands::fetch_models_for_config,
             commands::get_opencode_models,
             // ours: endpoint speed test + custom endpoint management
@@ -1631,6 +1651,9 @@ pub fn run() {
             commands::sync_universal_provider,
             // OpenCode specific
             commands::import_opencode_providers_from_live,
+            commands::import_deepseek_harness_providers_from_live,
+            commands::get_dsh_current_state,
+            commands::set_dsh_current_model,
             commands::get_opencode_live_provider_ids,
             // OpenClaw specific
             commands::import_openclaw_providers_from_live,
@@ -1852,6 +1875,10 @@ pub fn run() {
 
                             // 确保主窗口可见
                             if let Some(window) = app_handle.get_webview_window("main") {
+                                #[cfg(target_os = "windows")]
+                                {
+                                    let _ = window.set_skip_taskbar(false);
+                                }
                                 let _ = window.unminimize();
                                 let _ = window.show();
                                 let _ = window.set_focus();

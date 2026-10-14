@@ -12,7 +12,7 @@ type ProvidersByApp = Record<AppId, Record<string, Provider>>;
 type CurrentProviderState = Record<AppId, string>;
 type McpConfigState = Record<AppId, Record<string, McpServer>>;
 type LiveProviderIdsByApp = Record<
-  "opencode" | "openclaw" | "hermes",
+  "opencode" | "openclaw" | "hermes" | "deepseek-harness",
   string[]
 >;
 
@@ -74,6 +74,8 @@ const createDefaultProviders = (): ProvidersByApp => ({
   openclaw: {},
   hermes: {},
   pi: {},
+  "deepseek-harness": {},
+  mcode: {},
 });
 
 const createDefaultCurrent = (): CurrentProviderState => ({
@@ -86,15 +88,18 @@ const createDefaultCurrent = (): CurrentProviderState => ({
   openclaw: "",
   hermes: "",
   pi: "",
+  "deepseek-harness": "",
+  mcode: "",
 });
 
 let providers = createDefaultProviders();
 let current = createDefaultCurrent();
 let liveProviderIds: LiveProviderIdsByApp = {
-  opencode: [],
-  openclaw: [],
-  hermes: [],
-};
+    opencode: [],
+    openclaw: [],
+    hermes: [],
+    "deepseek-harness": [],
+  };
 let settingsState: Settings = {
   showInTray: true,
   minimizeToTrayOnClose: true,
@@ -200,6 +205,8 @@ let mcpConfigs: McpConfigState = {
   openclaw: {},
   hermes: {},
   pi: {},
+  "deepseek-harness": {},
+  mcode: {},
 };
 
 const cloneProviders = (value: ProvidersByApp) =>
@@ -212,6 +219,7 @@ export const resetProviderState = () => {
     opencode: [],
     openclaw: [],
     hermes: [],
+    "deepseek-harness": [],
   };
   sessionsState = createDefaultSessions();
   sessionMessagesState = createDefaultSessionMessages();
@@ -270,6 +278,8 @@ export const resetProviderState = () => {
     openclaw: {},
     hermes: {},
     pi: {},
+    "deepseek-harness": {},
+    mcode: {},
   };
 };
 

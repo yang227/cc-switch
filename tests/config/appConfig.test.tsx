@@ -2,14 +2,21 @@ import { describe, expect, it } from "vitest";
 import { isAdditiveAppId } from "@/config/appConfig";
 
 describe("appConfig provider lifecycle", () => {
-  it.each(["opencode", "openclaw", "hermes", "pi"])(
+  it.each(["opencode", "openclaw", "hermes", "pi", "mcode"])(
     "classifies %s as additive",
     (appId) => {
       expect(isAdditiveAppId(appId)).toBe(true);
     },
   );
 
-  it.each(["claude", "claude-desktop", "codex", "gemini", "grokbuild"])(
+  it.each([
+    "claude",
+    "claude-desktop",
+    "codex",
+    "gemini",
+    "grokbuild",
+    "deepseek-harness",
+  ])(
     "does not classify %s as additive",
     (appId) => {
       expect(isAdditiveAppId(appId)).toBe(false);
