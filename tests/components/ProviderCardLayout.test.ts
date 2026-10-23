@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { extractProviderBaseUrl } from "@/utils/providerConfigUtils";
 
 const PROVIDER_CARD_TSX = path.resolve(
   __dirname,
@@ -26,16 +27,22 @@ describe("ProviderCard layout", () => {
 
   it("lets website links use available card width before truncating", () => {
     expect(source).not.toContain("max-w-[280px]");
-    expect(source).toContain("flex min-w-0 flex-1 items-center gap-2");
-    expect(source).toContain("min-w-0 flex-1 space-y-1");
+    expect(source).toContain('<div className="min-w-0 flex-1">');
     expect(source).toContain(
-      "inline-flex max-w-full items-center overflow-hidden text-left text-sm",
+      "inline-flex max-w-full items-center overflow-hidden text-start",
     );
   });
 
   it("does not add a Pi-only model list to provider cards", () => {
     expect(source).not.toContain("ProviderModelSummary");
     expect(source).not.toContain("extractPiModelSummaryItems");
+  });
+
+  it("reads the official DSH baseURL field for card display", () => {
+    expect(source).toContain("extractProviderBaseUrl(provider.settingsConfig)");
+    expect(extractProviderBaseUrl({ baseURL: "https://api.deepseek.com" })).toBe(
+      "https://api.deepseek.com",
+    );
   });
 
   it("keeps Pi provider cards independent from routing capability state", () => {

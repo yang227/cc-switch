@@ -8,4 +8,8 @@ export type AppId =
   | "opencode"
   | "openclaw"
   | "hermes"
-  | "pi";
+  | "pi"
+  | "deepseek-harness"
+  | "kimi"
+  | "mcode"
+  | "agy";
